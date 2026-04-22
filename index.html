@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>My Taxi App</title>
+</head>
+<body>
+    <h1>Welcome to My Taxi</h1>
+    <p>Enter your details to book a ride:</p>
+    
+    <input id="pickup" placeholder="Pickup Location"><br>
+    <input id="destination" placeholder="Destination"><br>
+    <input id="distance" type="number" placeholder="Distance (in KM)"><br>
+    <button onclick="bookRide()">Book Now</button>
+
+    <h2>Recent Rides</h2>
+    <ul id="rideList"></ul>
+
+    <script>
+        // 1. Fetch and display rides with safe fallback for empty data
+        async function loadRides() {
+            try {
+                const response = await fetch('/api/rides');
+                const rides = await response.json();
+                
+                const list = document.getElementById('rideList');
+                list.innerHTML = rides.map(r => {
+                    // This handles potential missing data from old entries
+                    const dist = r.distance || 0;
+                    const fare = r.totalFare || 0;
+                    return `<li>${r.pickup} → ${r.destination} (${dist} KM) - Fare: LKR ${fare}</li>`;
+                }).join('');
+            } catch (err) {
+                console.error("Error loading rides:", err);
+            }
+        }
+
+        // 2. Book a ride and refresh the list
+        async function bookRide() {
+            const pickup = document.getElementById('pickup').value;
+            const destination = document.getElementById('destination').value;
+            const distance = parseFloat(document.getElementById('distance').value);
+
+            if (!pickup || !destination || isNaN(distance)) {
+                alert("Please fill in all fields correctly.");
+                return;
+            }
+
+            const response = await fetch('/api/ride', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pickup, destination, distance })
+            });
+
+            const result = await response.json();
+            alert("Booking confirmed! Your estimated fare is: LKR " + result.fare);
+            
+            // Clear inputs
+            document.getElementById('pickup').value = '';
+            document.getElementById('destination').value = '';
+            document.getElementById('distance').value = '';
+            
+            loadRides(); 
+        }
+
+        // Initial load
+        loadRides();
+    </script>
+</body>
+</html>
