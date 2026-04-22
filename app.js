@@ -1,43 +1,25 @@
 const express = require('express');
-const fs = require('fs');
-const app = express(); // <--- This line is critical!
-const port = 3000;
+const mongoose = require('mongoose'); // Import Mongoose
+const app = express();
 
-app.use(express.json());
+// Database Connection
+const dbURI = process.env.MONGO_URI; 
 
-// Load data file
-const DB_FILE = './rides.json';
-let rideHistory = fs.existsSync(DB_FILE) ? JSON.parse(fs.readFileSync(DB_FILE)) : [];
+mongoose.connect(dbURI)
+  .then(() => {
+    console.log('Connected to Database!');
+  })
+  .catch((err) => {
+    console.log('Database Error: ', err);
+  });
 
+// Your existing routes (keep these)
 app.get('/', (req, res) => {
-  res.sendFile(__dirname + '/index.html');
+  res.send('My Taxi App is running!');
 });
 
-app.get('/api/rides', (req, res) => {
-  res.json(rideHistory);
-});
-
-app.post('/api/ride', (req, res) => {
-  const { pickup, destination, distance } = req.body;
-  
-  // Pricing Business Logic
-  const baseFare = 50.00;
-  const ratePerKm = 80.00;
-  const totalFare = baseFare + (distance * ratePerKm);
-
-  const newRide = { 
-    pickup, 
-    destination, 
-    distance, 
-    totalFare 
-  };
-
-  rideHistory.push(newRide);
-  fs.writeFileSync(DB_FILE, JSON.stringify(rideHistory, null, 2));
-  
-  res.json({ message: "Ride booked!", fare: totalFare });
-});
-
-app.listen(port, () => {
-  console.log(`My Taxi Server running on port ${port}`);
+// Server listener
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`My Taxi Server running on port ${PORT}`);
 });
