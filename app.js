@@ -26,17 +26,12 @@ mongoose.connect(dbURI)
 
 // Registration Route
 app.post('/register-driver', async (req, res) => {
-  console.log("Received request for /register-driver");
-  console.log("Request Body:", req.body);
-
   try {
     const newDriver = new Driver(req.body);
-    console.log("Attempting to save to DB...");
     await newDriver.save();
-    console.log("Save successful!");
     res.status(201).send('Driver saved to database!');
   } catch (error) {
-    console.error("Error occurred:", error);
+    console.error("Error saving driver:", error);
     res.status(400).send('Error saving driver: ' + error.message);
   }
 });
@@ -58,7 +53,7 @@ app.get('/drivers/nearby', async (req, res) => {
             type: "Point",
             coordinates: [parseFloat(lng), parseFloat(lat)]
           },
-          $maxDistance: 5000 // 5km radius
+          $maxDistance: 5000
         }
       }
     });
