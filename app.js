@@ -1,83 +1,68 @@
 const express = require('express');
 const mongoose = require('mongoose');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const Driver = require('./models/Driver');
 
-// 1. Initialize App
 const app = express();
 app.use(express.json());
 
 const PORT = process.env.PORT || 10000;
 const dbURI = process.env.MONGO_URI;
+const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey'; // Set this in Render!
 
-// 2. Connect to Database & Start Server
-// We only start the server AFTER the database connection is successful
-mongoose.connect(dbURI)
-  .then(() => {
-    console.log('Connected to Database!');
-    app.listen(PORT, () => {
-      console.log(`My Taxi Server running on port ${PORT}`);
-    });
-  })
-  .catch((err) => {
-    console.error('Database connection failed:', err);
-    process.exit(1);
+// --- AUTH MIDDLEWARE ---
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (!token) return res.status(401).send('Access Denied');
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).send('Invalid Token');
+    req.user = user;
+    next();
   });
+};
 
-// 3. --- ROUTES ---
+// --- ROUTES ---
 
-// Registration Route (Handles Location)
+// 1. Register (Public)
 app.post('/register-driver', async (req, res) => {
   try {
-    const { name, phoneNumber, vehicleNumber, vehicleModel, status, lat, lng } = req.body;
-
+    const { name, phoneNumber, password, vehicleNumber, vehicleModel, lat, lng } = req.body;
     const newDriver = new Driver({
-      name,
-      phoneNumber,
-      vehicleNumber,
-      vehicleModel,
-      status: status || 'Available',
-      location: {
-        type: "Point",
-        // CRITICAL: MongoDB uses [longitude, latitude] order
-        coordinates: [parseFloat(lng || 80.6250), parseFloat(lat || 7.3590)] 
-      }
+      name, phoneNumber, password, vehicleNumber, vehicleModel,
+      location: { type: "Point", coordinates: [parseFloat(lng || 80.6250), parseFloat(lat || 7.3590)] }
     });
-
     await newDriver.save();
-    res.status(201).send('Driver saved to database with location!');
+    res.status(201).send('Driver registered successfully');
   } catch (error) {
-    if (error.code === 11000) {
-      return res.status(409).send('Error: A driver with this phone number already exists.');
-    }
-    res.status(400).send('Error saving driver: ' + error.message);
+    res.status(400).send('Error: ' + error.message);
   }
 });
 
-// Nearby Search Route
-app.get('/drivers/nearby', async (req, res) => {
+// 2. Login (Public)
+app.post('/login', async (req, res) => {
+  const { phoneNumber, password } = req.body;
+  const driver = await Driver.findOne({ phoneNumber });
+  if (!driver || !(await bcrypt.compare(password, driver.password))) {
+    return res.status(401).send('Invalid credentials');
+  }
+  const token = jwt.sign({ phoneNumber: driver.phoneNumber }, JWT_SECRET, { expiresIn: '1h' });
+  res.json({ token });
+});
+
+// 3. Nearby Search (Protected)
+app.get('/drivers/nearby', authenticateToken, async (req, res) => {
   const { lat, lng } = req.query;
-
-  if (!lat || !lng) {
-    return res.status(400).send('Please provide latitude and longitude');
-  }
-
-  try {
-    const drivers = await Driver.find({
-      status: 'Available',
-      location: {
-        $near: {
-          $geometry: {
-            type: "Point",
-            coordinates: [parseFloat(lng), parseFloat(lat)] // [lng, lat]
-          },
-          $maxDistance: 5000 // 5km
-        }
-      }
-    });
-
-    res.status(200).json(drivers);
-  } catch (error) {
-    console.error("Error finding drivers:", error);
-    res.status(500).send('Server Error: ' + error.message);
-  }
+  const drivers = await Driver.find({
+    status: 'Available',
+    location: { $near: { $geometry: { type: "Point", coordinates: [parseFloat(lng), parseFloat(lat)] }, $maxDistance: 5000 } }
+  });
+  res.json(drivers);
 });
+
+// Database & Server Setup
+mongoose.connect(dbURI)
+  .then(() => app.listen(PORT, () => console.log(`Server running on port ${PORT}`)))
+  .catch(err => console.error(err));

@@ -1,22 +1,26 @@
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 
 const driverSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  phoneNumber: { type: String, required: true, unique: true },
-  vehicleNumber: { type: String, required: true },
-  vehicleModel: { type: String },
-  status: { type: String, enum: ['Available', 'Busy', 'Offline'], default: 'Offline' },
-  
-  // FIXED: Added default coordinates [0, 0] to satisfy the 2dsphere index requirements
+  name: String,
+  phoneNumber: { type: String, unique: true, required: true },
+  password: { type: String, required: true }, // Added password field
+  vehicleNumber: String,
+  vehicleModel: String,
+  status: { type: String, default: 'Available' },
   location: {
     type: { type: String, default: 'Point' },
-    coordinates: { type: [Number], default: [0, 0] } 
-  },
-  
-  createdAt: { type: Date, default: Date.now }
+    coordinates: [Number] // [lng, lat]
+  }
 });
 
-// This index allows you to search for drivers "near" a passenger later
+// Hash password before saving
+driverSchema.pre('save', async function(next) {
+  if (!this.isModified('password')) return next();
+  this.password = await bcrypt.hash(this.password, 10);
+  next();
+});
+
 driverSchema.index({ location: '2dsphere' });
 
 module.exports = mongoose.model('Driver', driverSchema);
