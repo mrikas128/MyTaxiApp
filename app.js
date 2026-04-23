@@ -1,21 +1,64 @@
+const express = require('express');
+const mongoose = require('mongoose');
+const Driver = require('./models/Driver');
+
+// 1. Initialize App
+const app = express();
+app.use(express.json());
+
+const PORT = process.env.PORT || 10000;
+const dbURI = process.env.MONGO_URI;
+
+// 2. Connect to Database & Start Server
+mongoose.connect(dbURI)
+  .then(() => {
+    console.log('Connected to Database!');
+    app.listen(PORT, () => {
+      console.log(`My Taxi Server running on port ${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error('Database connection failed:', err);
+    process.exit(1);
+  });
+
+// 3. --- ROUTES ---
+
+// Registration Route
+app.post('/register-driver', async (req, res) => {
+  console.log("Received request for /register-driver");
+  console.log("Request Body:", req.body);
+
+  try {
+    const newDriver = new Driver(req.body);
+    console.log("Attempting to save to DB...");
+    await newDriver.save();
+    console.log("Save successful!");
+    res.status(201).send('Driver saved to database!');
+  } catch (error) {
+    console.error("Error occurred:", error);
+    res.status(400).send('Error saving driver: ' + error.message);
+  }
+});
+
+// Nearby Search Route
 app.get('/drivers/nearby', async (req, res) => {
   const { lat, lng } = req.query;
 
-  // Validate inputs
   if (!lat || !lng) {
     return res.status(400).send('Please provide latitude and longitude');
   }
 
   try {
     const drivers = await Driver.find({
-      status: 'Available', // Only find drivers who are free
+      status: 'Available',
       location: {
         $near: {
           $geometry: {
             type: "Point",
-            coordinates: [parseFloat(lng), parseFloat(lat)] // Note: GeoJSON uses [lng, lat]
+            coordinates: [parseFloat(lng), parseFloat(lat)]
           },
-          $maxDistance: 5000 // 5,000 meters (5km radius)
+          $maxDistance: 5000 // 5km radius
         }
       }
     });
