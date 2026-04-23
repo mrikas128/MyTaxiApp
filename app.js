@@ -10,6 +10,7 @@ const PORT = process.env.PORT || 10000;
 const dbURI = process.env.MONGO_URI;
 
 // 2. Connect to Database & Start Server
+// We only start the server AFTER the database connection is successful
 mongoose.connect(dbURI)
   .then(() => {
     console.log('Connected to Database!');
@@ -24,14 +25,30 @@ mongoose.connect(dbURI)
 
 // 3. --- ROUTES ---
 
-// Registration Route
+// Registration Route (Handles Location)
 app.post('/register-driver', async (req, res) => {
   try {
-    const newDriver = new Driver(req.body);
+    const { name, phoneNumber, vehicleNumber, vehicleModel, status, lat, lng } = req.body;
+
+    const newDriver = new Driver({
+      name,
+      phoneNumber,
+      vehicleNumber,
+      vehicleModel,
+      status: status || 'Available',
+      location: {
+        type: "Point",
+        // CRITICAL: MongoDB uses [longitude, latitude] order
+        coordinates: [parseFloat(lng || 80.6250), parseFloat(lat || 7.3590)] 
+      }
+    });
+
     await newDriver.save();
-    res.status(201).send('Driver saved to database!');
+    res.status(201).send('Driver saved to database with location!');
   } catch (error) {
-    console.error("Error saving driver:", error);
+    if (error.code === 11000) {
+      return res.status(409).send('Error: A driver with this phone number already exists.');
+    }
     res.status(400).send('Error saving driver: ' + error.message);
   }
 });
@@ -51,9 +68,9 @@ app.get('/drivers/nearby', async (req, res) => {
         $near: {
           $geometry: {
             type: "Point",
-            coordinates: [parseFloat(lng), parseFloat(lat)]
+            coordinates: [parseFloat(lng), parseFloat(lat)] // [lng, lat]
           },
-          $maxDistance: 5000
+          $maxDistance: 5000 // 5km
         }
       }
     });
