@@ -1,32 +1,31 @@
 const express = require('express');
 const mongoose = require('mongoose');
-const Driver = require('./models/Driver'); // Make sure this file exists in /models
+const Driver = require('./models/Driver');
 
 const app = express();
 
-// 1. Middleware
-app.use(express.json()); // Allows the server to read JSON data
-app.use(express.urlencoded({ extended: true })); // Allows reading form data
+// Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// 2. Database Connection
-// We use process.env.MONGODB_URI so your password is never hardcoded (Security)
+// 1. Database Connection
+// Ensure MONGODB_URI is set in Render Environment Variables
 const dbURI = process.env.MONGODB_URI;
 
 if (!dbURI) {
-    console.error("FATAL ERROR: MONGODB_URI is not set in Render environment variables.");
-    process.exit(1); // Stop the app if no database is found
+    console.error("FATAL ERROR: MONGODB_URI is not set.");
+    process.exit(1);
 }
 
 mongoose.connect(dbURI)
     .then(() => console.log("Successfully connected to database!"))
     .catch((err) => console.error("Database connection error:", err));
 
-// 3. Login Route
+// 2. Login Route
 app.post('/login', async (req, res) => {
     try {
         const { identifier, password } = req.body;
 
-        // Find driver by EITHER email OR phone number using the $or operator
         const driver = await Driver.findOne({
             $or: [
                 { email: identifier },
@@ -34,34 +33,24 @@ app.post('/login', async (req, res) => {
             ]
         });
 
-        // If driver doesn't exist, stop here
         if (!driver) {
-            return res.status(401).json({ message: "Invalid email, phone number, or password." });
+            return res.status(401).json({ message: "Account not found." });
         }
 
-        // Verify password using the method we added to Driver.js
         const isMatch = await driver.matchPassword(password);
         
         if (!isMatch) {
-            return res.status(401).json({ message: "Invalid email, phone number, or password." });
+            return res.status(401).json({ message: "Invalid password." });
         }
 
-        // If successful
-        res.status(200).json({ 
-            message: "Login successful!", 
-            driverId: driver._id,
-            name: driver.fullName 
-        });
-
+        res.status(200).json({ message: "Login successful!", driverId: driver._id });
     } catch (err) {
-        console.error("Login error:", err);
-        res.status(500).json({ message: "Internal server error." });
+        res.status(500).json({ message: "Server error: " + err.message });
     }
 });
 
-// 4. Start Server
-// Render will provide the PORT, otherwise we default to 10000
+// 3. Port Binding (The '0.0.0.0' is crucial for Render)
 const port = process.env.PORT || 10000;
-app.listen(port, () => {
+app.listen(port, '0.0.0.0', () => {
     console.log(`Server running on port ${port}`);
 });
